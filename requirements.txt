@@ -1,0 +1,17 @@
+# Requirements per Chess App
+# Applicazione di scacchi con interfaccia grafica e motore AI
+
+# Interfaccia grafica moderna con temi Bootstrap
+ttkbootstrap
+
+# Libreria per la logica degli scacchi (mosse, regole, PGN, FEN)
+python-chess
+
+# Wrapper Python per il motore di scacchi Stockfish
+stockfish
+
+# Gestione degli appunti per copiare PGN
+pyperclip
+
+# Gestione e manipolazione immagini (per sprite dei pezzi)
+Pillow
