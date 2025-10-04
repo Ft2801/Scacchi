@@ -1,4 +1,4 @@
-# Simple Chess Application
+# App scacchi desktop
 
 ![Chess App Screenshot](assets/screenshot.png)
 
