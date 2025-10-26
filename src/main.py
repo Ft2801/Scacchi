@@ -16,10 +16,11 @@ import datetime
 import pyperclip
 import threading
 import queue
+import time
 
 from src.config import *
 from src.core.game_logic import GameLogic
-from src.ui.ui_components import ChessBoard, EvalBar
+from src.ui.ui_components import ChessBoard, EvalBar, ModernButton
 from src.analysis.advanced_move_classifier import AdvancedMoveClassifier
 from src.core.stockfish_manager import StockfishManager, eval_to_centipawns
 from src.analysis.accuracy_calculator import (
@@ -39,6 +40,11 @@ class ChessApp:
     def __init__(self, master):
         self.master = master
         self.master.title("Chess")
+        self.master.configure(bg=COLOR_BG_PRIMARY)
+        
+        # Configurazione degli stili moderni
+        self._setup_modern_styles()
+        
         self.logic = GameLogic()
         self.game_mode = None
         self.selected_square = None
@@ -80,6 +86,67 @@ class ChessApp:
         
         self.create_main_menu()
 
+    def _setup_modern_styles(self):
+        """Configura gli stili moderni per il tema scuro."""
+        style = ttk.Style()
+        
+        # Background principale - con stile personalizzato aggressivo
+        style.configure('TFrame', background=COLOR_BG_PRIMARY)
+        style.configure('TLabel', background=COLOR_BG_PRIMARY, foreground=COLOR_TEXT_PRIMARY)
+        
+        # Labelframe con background primario (no sfondo grigio)
+        style.configure('TLabelframe', background=COLOR_BG_PRIMARY, foreground=COLOR_TEXT_PRIMARY, padding=10, relief='flat', borderwidth=0)
+        style.configure('TLabelframe.Label', background=COLOR_BG_PRIMARY, foreground=COLOR_TEXT_PRIMARY)
+        
+        # Bottoni con ombreggiatura e effetto moderno
+        style.configure('TButton', font=('Helvetica', 10), padding=8, relief='flat')
+        style.map('TButton',
+                  background=[('active', COLOR_ACCENT_PRIMARY), ('pressed', COLOR_ACCENT_SECONDARY)],
+                  foreground=[('active', '#000'), ('pressed', '#000')])
+        
+        # Checkbutton moderno - sfondo trasparente
+        style.configure('TCheckbutton', background=COLOR_BG_PRIMARY, foreground=COLOR_TEXT_PRIMARY, padding=5, relief='flat', borderwidth=0)
+        style.map('TCheckbutton', background=[('active', COLOR_BG_PRIMARY)])
+        
+        # Radiobutton moderno - sfondo trasparente
+        style.configure('TRadiobutton', background=COLOR_BG_PRIMARY, foreground=COLOR_TEXT_PRIMARY, padding=5, relief='flat', borderwidth=0)
+        style.map('TRadiobutton', background=[('active', COLOR_BG_PRIMARY)])
+        
+        # Combobox moderno
+        style.configure('TCombobox', font=('Helvetica', 10), padding=5, fieldbackground=COLOR_BG_SECONDARY, background=COLOR_BG_SECONDARY)
+        
+        # Scrollbar moderno
+        style.configure('Vertical.TScrollbar', background=COLOR_BG_SECONDARY, troughcolor=COLOR_BG_PRIMARY, bordercolor=COLOR_BORDER, lightcolor=COLOR_ACCENT_PRIMARY, darkcolor=COLOR_ACCENT_PRIMARY)
+        style.configure('Horizontal.TScrollbar', background=COLOR_BG_SECONDARY, troughcolor=COLOR_BG_PRIMARY, bordercolor=COLOR_BORDER, lightcolor=COLOR_ACCENT_PRIMARY, darkcolor=COLOR_ACCENT_PRIMARY)
+
+    def _fade_out(self, callback=None):
+        """Effetto dissolvenza rapido della finestra durante la transizione"""
+        def fade_animation():
+            # Fade out
+            for i in range(1, 11):
+                alpha = 1.0 - (i / 10.0)
+                self.master.attributes('-alpha', alpha)
+                self.master.update()
+                time.sleep(0.03)
+            
+            # Esegui il callback mentre la finestra è scomparsa
+            if callback:
+                callback()
+            
+            # Fade in
+            for i in range(1, 11):
+                alpha = i / 10.0
+                self.master.attributes('-alpha', alpha)
+                self.master.update()
+                time.sleep(0.03)
+        
+        # Esegui in un thread separato per non bloccare
+        threading.Thread(target=fade_animation, daemon=True).start()
+    
+    def _fade_in(self):
+        """Non necessario, il fade è già gestito in _fade_out"""
+        pass
+
     def on_closing(self):
         if self.ai_move_job_id:
             self.master.after_cancel(self.ai_move_job_id)
@@ -96,8 +163,15 @@ class ChessApp:
         # Converte i livelli in una lista di stringhe per i Combobox
         ai_level_choices = [str(level) for level in AI_LEVELS.keys()]
         
-        menu_frame = ttk.Frame(self.main_container)
-        menu_frame.pack(expand=True, fill=X, padx=30, pady=20)
+        # Frame esterno che occupa l'intero container
+        outer_frame = ttk.Frame(self.main_container)
+        outer_frame.pack(expand=True, fill=BOTH)
+        outer_frame.columnconfigure(0, weight=1)
+        outer_frame.rowconfigure(0, weight=1)
+        
+        # Frame interno con dimensioni fisse, centrato
+        menu_frame = ttk.Frame(outer_frame)
+        menu_frame.grid(row=0, column=0, padx=30, pady=20)
         
         title_label = ttk.Label(menu_frame, text="Chess", font=("Helvetica", 24, "bold"))
         title_label.pack(pady=(0, 20))
@@ -191,6 +265,16 @@ class ChessApp:
             
             self.master.after(0, reset_loading)
 
+    def _transition_to_game(self):
+        """Transizione da menu a gioco con fade"""
+        self.create_game_ui()
+        self._fade_in()
+    
+    def _transition_to_menu(self):
+        """Transizione da gioco a menu con fade"""
+        self.create_main_menu()
+        self._fade_in()
+    
     def start_game(self, mode):
         self.game_mode = mode
         self.is_paused = False
@@ -203,7 +287,8 @@ class ChessApp:
             self.ai_white_level = int(self.cvc_white_difficulty_selector.get())
             self.ai_black_level = int(self.cvc_black_difficulty_selector.get())
         
-        self.create_game_ui()
+        # Usa effetto fade per transizione da menu a gioco
+        self._fade_out(callback=self._transition_to_game)
         
         # Carica Stockfish in background se non già in corso
         if not self.is_loading_stockfish and self.stockfish_analyzer is None:
@@ -238,13 +323,25 @@ class ChessApp:
         game_frame = ttk.Frame(self.main_container)
         game_frame.pack(fill=BOTH, expand=True)
         
+        # Container per scacchiera e Eval Bar (usa grid per gestire lo spazio in modo fisso)
         board_container = ttk.Frame(game_frame)
         board_container.pack(side=LEFT, fill=Y, padx=10, pady=10)
         
-        # MODIFICATO: Rimossa la chiamata .pack() da qui, perché è già dentro la classe ChessBoard
-        self.board_widget = ChessBoard(board_container, self)
+        board_container.columnconfigure(0, weight=0)  # Scacchiera
+        board_container.columnconfigure(1, weight=0)  # Eval Bar (fixed width)
         
-        self.eval_bar = EvalBar(board_container)
+        # Scacchiera
+        self.board_widget = ChessBoard(board_container, self)
+        self.board_widget.grid(row=0, column=0, sticky="nsew")
+        
+        # Eval Bar (placeholder frame che occupa sempre lo stesso spazio, inizialmente nascosto)
+        self.eval_bar_frame = ttk.Frame(board_container, width=EVAL_BAR_WIDTH + 4)
+        self.eval_bar_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
+        self.eval_bar_frame.grid_propagate(False)
+        self.eval_bar_frame.grid_remove()  # Inizialmente nascosto
+        
+        self.eval_bar = EvalBar(self.eval_bar_frame)
+        self.eval_bar.pack(fill=BOTH, expand=True)
         
         side_panel = ttk.Frame(game_frame)
         side_panel.pack(side=LEFT, fill=BOTH, expand=True, padx=10, pady=10)
@@ -259,7 +356,9 @@ class ChessApp:
         self.engine_info_label = ttk.Label(side_panel, text="", font=("Helvetica", 10, "italic"), justify=LEFT)
         
         self.analysis_frame = ttk.Labelframe(side_panel, text="Analisi Motore", padding=10)
-        self.analysis_text = Text(self.analysis_frame, height=3, wrap=tk.WORD, font=("Courier", 10), state=tk.DISABLED)
+        self.analysis_text = Text(self.analysis_frame, height=3, wrap=tk.WORD, font=("Courier", 10), state=tk.DISABLED,
+                                   bg=COLOR_BG_SECONDARY, fg=COLOR_TEXT_PRIMARY, insertbackground=COLOR_ACCENT_PRIMARY,
+                                   relief=tk.FLAT, highlightthickness=1, highlightcolor=COLOR_ACCENT_PRIMARY, highlightbackground=COLOR_BORDER)
         self.analysis_text.pack(fill=BOTH, expand=True)
 
         history_frame = ttk.Labelframe(side_panel, text="Cronologia Mosse", padding=10)
@@ -270,7 +369,9 @@ class ChessApp:
         h_scroll = ttk.Scrollbar(history_frame)
         h_scroll.grid(row=0, column=1, sticky="ns")
         
-        self.history_text = Text(history_frame, height=5, wrap=tk.WORD, yscrollcommand=h_scroll.set, font=("Courier", 11))
+        self.history_text = Text(history_frame, height=5, wrap=tk.WORD, yscrollcommand=h_scroll.set, font=("Courier", 11),
+                                 bg=COLOR_BG_SECONDARY, fg=COLOR_TEXT_PRIMARY, insertbackground=COLOR_ACCENT_PRIMARY,
+                                 relief=tk.FLAT, highlightthickness=1, highlightcolor=COLOR_ACCENT_PRIMARY, highlightbackground=COLOR_BORDER)
         self.history_text.grid(row=0, column=0, sticky="nsew")
         self.history_text.config(state=tk.DISABLED)
         h_scroll.config(command=self.history_text.yview)
@@ -569,16 +670,17 @@ class ChessApp:
             self.eval_bar_var.set(False)
             self.show_best_move_var.set(False)
             self.is_loading_stockfish = False  # Reset flag di caricamento
-            self.create_main_menu()
+            # Usa effetto fade per transizione da gioco a menu
+            self._fade_out(callback=self._transition_to_menu)
         elif self.game_mode == 'cvc' and not was_paused:
             self.toggle_pause()
 
     def _toggle_eval_bar(self):
         if self.eval_bar_var.get():
-            self.eval_bar.pack(side=LEFT, fill=Y, pady=10)
+            self.eval_bar_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
             self.new_eval_request.set()
         else:
-            self.eval_bar.pack_forget()
+            self.eval_bar_frame.grid_remove()
             
     def _start_eval_thread(self):
         if not (self.eval_thread and self.eval_thread.is_alive()):
@@ -784,10 +886,9 @@ class ChessApp:
             # Mostra indicatore di caricamento di Stockfish se in corso
             if self.is_loading_stockfish and not self.stockfish_loaded.is_set():
                 status_text = "⏳ Caricamento motore di analisi..."
-            elif not self.viewing_history:
-                status_text = self.logic.get_game_status()
             else:
-                status_text = f"Mossa {board_to_show.fullmove_number}: Visualizzazione Storico"
+                # Mostra solo lo stato del gioco, senza messaggi dinamici
+                status_text = self.logic.get_game_status()
             self.status_label.config(text=status_text)
         
         self.update_button_states()

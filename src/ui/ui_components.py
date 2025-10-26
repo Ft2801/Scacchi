@@ -27,8 +27,90 @@ from src.config import (
     LEGAL_MOVE_RING_WIDTH, ARROW_WIDTH_RATIO, ANIMATION_DURATION_MS,
     ANIMATION_DELAY_MS, TIME_TO_MILLISECONDS, CLASSIFICATION_ICON_SIZE_RATIO,
     PROMOTION_OVERLAY_COLOR, PROMOTION_OVERLAY_STIPPLE, COORDINATE_FONT_SIZE_DIVISOR,
-    COORDINATE_PADDING, BOARD_RANKS, BOARD_FILES
+    COORDINATE_PADDING, BOARD_RANKS, BOARD_FILES,
+    COLOR_BG_PRIMARY, COLOR_ACCENT_PRIMARY, COLOR_TEXT_PRIMARY, COLOR_HOVER
 )
+
+class ModernButton(tk.Canvas):
+    """
+    Bottone moderno con effetti hover e styling contemporaneo.
+    """
+    def __init__(self, parent, text="", command=None, style="primary", **kwargs):
+        """
+        Inizializza il bottone moderno.
+        
+        Args:
+            parent: Widget genitore
+            text: Testo del bottone
+            command: Funzione da eseguire al click
+            style: Stile ('primary', 'secondary', 'danger', 'success')
+        """
+        super().__init__(parent, height=40, bg=COLOR_BG_PRIMARY, highlightthickness=0, **kwargs)
+        
+        self.text = text
+        self.command = command
+        self.style = style
+        
+        # Colori per ogni stile
+        self.colors = {
+            'primary': {'bg': COLOR_ACCENT_PRIMARY, 'hover': '#00D4FF', 'text': '#000'},
+            'secondary': {'bg': '#404854', 'hover': '#505A6A', 'text': COLOR_TEXT_PRIMARY},
+            'danger': {'bg': '#EF476F', 'hover': '#FF5A7E', 'text': '#000'},
+            'success': {'bg': '#06D6A0', 'hover': '#1AE8B6', 'text': '#000'},
+        }
+        
+        self.current_color = self.colors[style]['bg']
+        self.text_id = None
+        self.rect_id = None
+        
+        self.bind("<Button-1>", self._on_click)
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        
+        self.after(100, self._draw)
+    
+    def _draw(self):
+        """Disegna il bottone."""
+        self.delete("all")
+        w = self.winfo_width() if self.winfo_width() > 1 else 100
+        h = self.winfo_height() if self.winfo_height() > 1 else 40
+        
+        # Rettangolo arrotondato
+        radius = 6
+        self.rect_id = self.create_polygon(
+            radius, 0,
+            w-radius, 0,
+            w, radius,
+            w, h-radius,
+            w-radius, h,
+            radius, h,
+            0, h-radius,
+            0, radius,
+            fill=self.current_color, outline="", smooth=True
+        )
+        
+        # Testo
+        self.text_id = self.create_text(
+            w//2, h//2,
+            text=self.text,
+            font=("Helvetica", 10, "bold"),
+            fill=self.colors[self.style]['text']
+        )
+    
+    def _on_enter(self, event=None):
+        """Effetto hover."""
+        self.current_color = self.colors[self.style]['hover']
+        self._draw()
+    
+    def _on_leave(self, event=None):
+        """Effetto uscita hover."""
+        self.current_color = self.colors[self.style]['bg']
+        self._draw()
+    
+    def _on_click(self, event=None):
+        """Esegui il comando."""
+        if self.command:
+            self.command()
 
 class EvalBar(ttk.Frame):
     """

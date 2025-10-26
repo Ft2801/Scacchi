@@ -10,13 +10,25 @@ SQUARE_SIZE = BOARD_SIZE // 8  # Dimensione di ogni casella
 ASSET_PATH = "assets"  # Percorso base per le risorse
 PIECES_PATH = "assets/pieces"  # Percorso per le immagini dei pezzi
 CLASSIFICATIONS_PATH = "assets/classifications"  # Percorso per le immagini di classificazione
-THEME_APP = "litera"  # Tema dell'interfaccia grafica
+THEME_APP = "darkly"  # Tema scuro dell'interfaccia grafica
 BOARD_COLORS = ("#EADAB9", "#B58863")  # Colori delle caselle (chiaro, scuro)
 STOCKFISH_PATH = "engine/stockfish.exe"  # Percorso dell'eseguibile Stockfish
 
+# --- COSTANTI PER IL TEMA SCURO E COLORI MODERNI ---
+COLOR_BG_PRIMARY = "#0F1419"  # Nero profondo
+COLOR_BG_SECONDARY = "#1A1F28"  # Grigio scuro
+COLOR_ACCENT_PRIMARY = "#00B4D8"  # Blu azzurro
+COLOR_ACCENT_SECONDARY = "#0096C7"  # Blu scuro
+COLOR_TEXT_PRIMARY = "#E8EAED"  # Testo chiaro
+COLOR_TEXT_SECONDARY = "#9AA0A6"  # Testo grigio
+COLOR_BORDER = "#2A3139"  # Bordo scuro
+COLOR_HOVER = "#264653"  # Hover background
+COLOR_SUCCESS = "#06D6A0"  # Verde accento
+COLOR_ERROR = "#EF476F"  # Rosso accento
+
 # --- COSTANTI PER L'INTERFACCIA UTENTE ---
 # Dimensioni finestre
-MENU_WINDOW_GEOMETRY = "500x650"
+MENU_WINDOW_GEOMETRY = "1150x800"
 GAME_WINDOW_GEOMETRY = "1150x800"
 
 # Ritardi e timing (in millisecondi)
@@ -45,16 +57,16 @@ EVAL_BAR_THRESHOLD = 0.001
 EVAL_CENTIPAWN_DIVISOR = 100.0
 
 # --- COSTANTI PER I COLORI DELL'INTERFACCIA ---
-COLOR_EVAL_BAR_BG = "#333"
-COLOR_EVAL_BAR_TOP_BG = "#111"
-COLOR_EVAL_BAR_TOP_FG = "white"
-COLOR_EVAL_BAR_BOTTOM_BG = "#FFF"
-COLOR_EVAL_BAR_BOTTOM_FG = "black"
-COLOR_LEGAL_MOVE = "#64A455"
-COLOR_LAST_MOVE = "#f0e68c"
-COLOR_CHECK = "#FF6347"
-COLOR_ARROW_DEFAULT = "#18844D"
-COLOR_HIGHLIGHT_DEFAULT = "#F6F669"
+COLOR_EVAL_BAR_BG = "#1A1F28"
+COLOR_EVAL_BAR_TOP_BG = "#0F1419"
+COLOR_EVAL_BAR_TOP_FG = "#E8EAED"
+COLOR_EVAL_BAR_BOTTOM_BG = "#E8EAED"
+COLOR_EVAL_BAR_BOTTOM_FG = "#0F1419"
+COLOR_LEGAL_MOVE = "#06D6A0"
+COLOR_LAST_MOVE = "#FFB703"
+COLOR_CHECK = "#EF476F"
+COLOR_ARROW_DEFAULT = "#00B4D8"
+COLOR_HIGHLIGHT_DEFAULT = "#FFB703"
 PROMOTION_OVERLAY_COLOR = "#000000"
 PROMOTION_OVERLAY_STIPPLE = "gray50"
 
