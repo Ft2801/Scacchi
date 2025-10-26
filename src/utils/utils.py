@@ -244,7 +244,7 @@ def calculate_player_accuracy(accuracies, win_chances, is_white):
     Returns:
         Accuratezza finale arrotondata a 1 decimale, o 0 se non ci sono mosse
     """
-    from chess_analysis.accuracy_calculator import calculate_final_accuracy
+    from src.analysis.accuracy_calculator import calculate_final_accuracy
     
     if not accuracies:
         return 0.0

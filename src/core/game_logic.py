@@ -154,7 +154,7 @@ class GameLogic:
         Returns:
             Stringa descrittiva dello stato della partita
         """
-        from utils import get_turn_color_name
+        from src.utils.utils import get_turn_color_name
         
         if self.board.is_checkmate():
             winner = get_turn_color_name(not self.board.turn)

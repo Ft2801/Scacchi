@@ -50,22 +50,20 @@ class ChessApp:
         
         self.eval_bar_var = tk.BooleanVar(value=False)
         self.show_best_move_var = tk.BooleanVar(value=False)
-        
+                
         self.eval_thread = None
         self.eval_thread_running = False
         self.eval_queue = queue.Queue()
         self.new_eval_request = threading.Event()
+        self.force_reanalyze = False
         self.review_queue = queue.Queue()
         self.review_data = []
         
-        self.stockfish_analyzer = StockfishManager.get_instance(
-            depth=self.logic.analysis_depth,
-            threads=STOCKFISH_ANALYZER_THREADS,
-            key="analyzer"
-        )
-        
-        if not self.stockfish_analyzer:
-            print("AVVISO: Stockfish non trovato per l'analisi.")
+        # Caricamento lazy di Stockfish - non caricato all'avvio del menu
+        self.stockfish_analyzer = None
+        self.stockfish_loading_thread = None
+        self.stockfish_loaded = threading.Event()
+        self.is_loading_stockfish = False
 
         self.is_paused = False
         self.player_color = None
@@ -152,6 +150,47 @@ class ChessApp:
         if not self.logic.stockfish_player:
             ttk.Label(menu_frame, text="Stockfish non trovato.\nFunzionalità AI disabilitate.", bootstyle="danger", justify=CENTER).pack(pady=20)
 
+    def _load_stockfish_background(self):
+        """Carica Stockfish in background"""
+        try:
+            self.stockfish_analyzer = StockfishManager.get_instance(
+                depth=self.logic.analysis_depth,
+                threads=STOCKFISH_ANALYZER_THREADS,
+                key="analyzer"
+            )
+        except Exception as e:
+            print(f"Errore nel caricamento di Stockfish: {e}")
+            self.stockfish_analyzer = None
+        finally:
+            self.stockfish_loaded.set()
+    
+    def _wait_for_stockfish_loaded(self):
+        """Attende il caricamento di Stockfish e poi avvia il thread di valutazione"""
+        if self.stockfish_loaded.wait(timeout=30):  # Attende max 30 secondi
+            if self.stockfish_analyzer:
+                # Stockfish caricato, usa after() per aggiornare GUI nel thread principale
+                def enable_stockfish_ui():
+                    if safe_widget_exists(self, 'eval_bar_checkbutton'):
+                        self.eval_bar_checkbutton.config(state=tk.NORMAL)
+                    if safe_widget_exists(self, 'best_move_checkbutton'):
+                        self.best_move_checkbutton.config(state=tk.NORMAL)
+                    
+                    self._start_eval_thread()
+                    self._process_eval_queue()
+                    self.new_eval_request.set()
+                    self.is_loading_stockfish = False
+                    self.update_display()
+                
+                self.master.after(0, enable_stockfish_ui)
+        else:
+            # Timeout - Stockfish non caricato
+            def reset_loading():
+                if safe_widget_exists(self, 'status_label'):
+                    self.is_loading_stockfish = False
+                    self.update_display()
+            
+            self.master.after(0, reset_loading)
+
     def start_game(self, mode):
         self.game_mode = mode
         self.is_paused = False
@@ -166,7 +205,24 @@ class ChessApp:
         
         self.create_game_ui()
         
-        if self.stockfish_analyzer:
+        # Carica Stockfish in background se non già in corso
+        if not self.is_loading_stockfish and self.stockfish_analyzer is None:
+            self.is_loading_stockfish = True
+            self.stockfish_loaded.clear()
+            self.stockfish_loading_thread = threading.Thread(
+                target=self._load_stockfish_background,
+                daemon=True
+            )
+            self.stockfish_loading_thread.start()
+            
+            # Avvia un thread per attendere il caricamento e poi inizializzare il motore di analisi
+            stockfish_waiter_thread = threading.Thread(
+                target=self._wait_for_stockfish_loaded,
+                daemon=True
+            )
+            stockfish_waiter_thread.start()
+        elif self.stockfish_analyzer:
+            # Stockfish già caricato, avvia subito il thread di valutazione
             self._start_eval_thread()
             self._process_eval_queue()
             self.new_eval_request.set()
@@ -238,8 +294,10 @@ class ChessApp:
         self.options_frame = ttk.Frame(side_panel)
         self.options_frame.grid(row=6, column=0, sticky="ew", pady=5)
         eval_bar_state = tk.NORMAL if self.stockfish_analyzer else tk.DISABLED
-        ttk.Checkbutton(self.options_frame, text="Mostra Eval Bar", variable=self.eval_bar_var, command=self._toggle_eval_bar, state=eval_bar_state).pack(anchor='w')
-        ttk.Checkbutton(self.options_frame, text="Mostra Mossa Migliore", variable=self.show_best_move_var, command=self._on_toggle_best_move, state=eval_bar_state).pack(anchor='w')
+        self.eval_bar_checkbutton = ttk.Checkbutton(self.options_frame, text="Mostra Eval Bar", variable=self.eval_bar_var, command=self._toggle_eval_bar, state=eval_bar_state)
+        self.eval_bar_checkbutton.pack(anchor='w')
+        self.best_move_checkbutton = ttk.Checkbutton(self.options_frame, text="Mostra Mossa Migliore", variable=self.show_best_move_var, command=self._on_toggle_best_move, state=eval_bar_state)
+        self.best_move_checkbutton.pack(anchor='w')
         ttk.Checkbutton(self.options_frame, text="Ruota Scacchiera Automaticamente", variable=self.auto_flip_var, command=self.toggle_auto_flip).pack(anchor='w')
         
         btn_panel = ttk.Frame(side_panel)
@@ -272,6 +330,7 @@ class ChessApp:
             self.engine_info_label.grid(row=1, column=0, sticky="ew", pady=(0, 10))
             self.analysis_frame.grid(row=2, column=0, sticky="nsew", pady=5)
             if self.stockfish_analyzer:
+                self.force_reanalyze = True
                 self.new_eval_request.set()
         else:
             self.engine_info_label.grid_remove()
@@ -360,21 +419,34 @@ class ChessApp:
             self.analysis_text.config(state=tk.DISABLED)
 
     def _eval_loop(self):
+        last_analyzed_fen = None
         while self.eval_thread_running:
-            self.new_eval_request.wait()
+            # Aspetta il segnale con timeout per controllare periodicamente cambiamenti di posizione
+            self.new_eval_request.wait(timeout=0.5)
             if not self.eval_thread_running:
                 break
+            
+            # Se viene richiesta una re-analisi forzata, resetta last_analyzed_fen
+            if self.force_reanalyze:
+                last_analyzed_fen = None
+                self.force_reanalyze = False
+            
             try:
                 # Usa display_board se stiamo visualizzando la cronologia, altrimenti usa logic.board
                 board_to_analyze = self.display_board if self.viewing_history else self.logic.board
                 fen = board_to_analyze.fen()
-                self.stockfish_analyzer.set_fen_position(fen)
-                top_moves = self.stockfish_analyzer.get_top_moves(TOP_MOVES_COUNT)
-                self.eval_queue.put((top_moves, self.logic.analysis_depth))
+                
+                # Analizza solo se la posizione è cambiata o se è stata esplicitamente richiesta
+                if fen != last_analyzed_fen:
+                    self.stockfish_analyzer.set_fen_position(fen)
+                    top_moves = self.stockfish_analyzer.get_top_moves(TOP_MOVES_COUNT)
+                    self.eval_queue.put((top_moves, self.logic.analysis_depth))
+                    last_analyzed_fen = fen
             except Exception as e:
                 if self.eval_thread_running:
                     print(f"Errore nel thread di valutazione: {e}")
                 break
+            
             self.new_eval_request.clear()
 
     def _process_eval_queue(self):
@@ -417,6 +489,7 @@ class ChessApp:
                 
                 if self.logic.board.is_game_over():
                     self.game_over_state = True
+                    self.board_widget.is_enabled = True
                 else:
                     if self.stockfish_analyzer:
                         self.new_eval_request.set()
@@ -427,6 +500,9 @@ class ChessApp:
                         self.premove = None
                     elif is_ai_turn(self.game_mode, self.logic.board.turn, self.player_color):
                         self.trigger_ai_move()
+                    else:
+                        # È il turno del giocatore, abilita il board
+                        self.board_widget.is_enabled = True
                 self.update_display()
         
         # Avvia l'animazione o esegui direttamente
@@ -492,6 +568,7 @@ class ChessApp:
             self.auto_flip_var.set(False)
             self.eval_bar_var.set(False)
             self.show_best_move_var.set(False)
+            self.is_loading_stockfish = False  # Reset flag di caricamento
             self.create_main_menu()
         elif self.game_mode == 'cvc' and not was_paused:
             self.toggle_pause()
@@ -685,7 +762,9 @@ class ChessApp:
         
         if ai_move:
             self.execute_move(ai_move)
-        if self.game_mode == 'pvc':
+        
+        # Riabilita il board se è il turno del giocatore o se la partita è terminata
+        if self.game_mode == 'pvc' or self.game_over_state:
             self.board_widget.is_enabled = True
 
     def complete_promotion(self, move, piece_type):
@@ -702,7 +781,13 @@ class ChessApp:
         
         # Aggiorna lo status label
         if safe_widget_exists(self, 'status_label'):
-            status_text = self.logic.get_game_status() if not self.viewing_history else f"Mossa {board_to_show.fullmove_number}: Visualizzazione Storico"
+            # Mostra indicatore di caricamento di Stockfish se in corso
+            if self.is_loading_stockfish and not self.stockfish_loaded.is_set():
+                status_text = "⏳ Caricamento motore di analisi..."
+            elif not self.viewing_history:
+                status_text = self.logic.get_game_status()
+            else:
+                status_text = f"Mossa {board_to_show.fullmove_number}: Visualizzazione Storico"
             self.status_label.config(text=status_text)
         
         self.update_button_states()
@@ -763,7 +848,7 @@ class ChessApp:
         prev_eval_cp = 20
 
         # Aggiungi la probabilità di vittoria iniziale
-        from chess_analysis.accuracy_calculator import winning_chances_percent
+        from src.analysis.accuracy_calculator import winning_chances_percent
         win_chances.append(winning_chances_percent(prev_eval_cp))
 
         for i, move in enumerate(moves):
